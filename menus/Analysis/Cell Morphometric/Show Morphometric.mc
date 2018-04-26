@@ -1,0 +1,3 @@
+Open>{'path': '../../../data/Morphometric TestImg.png'}
+Multiply>{'num': 0.5}
+Cell Morphometric>{'con': '8-connect', 'slice': False, 'compactness': True, 'convex_hull_area_ratio': True, 'convex_hull_perimeter_ratio': True, 'elliptic_cpmpactness': True, 'feret_ratio': True, 'radial_distance_mean': True, 'radial_distance_sd': True, 'radial_distance_area_radtio': True, 'zero_crossings': True, 'entropy': True}
