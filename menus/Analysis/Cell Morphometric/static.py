@@ -14,11 +14,15 @@ import os,time
 
 class ShowPlt:
     def __init__(self, img):
-        self.img = img
+        l=int(max(img.shape)*1.5)
+        img1=np.zeros((l,l))
+        img1[int((l-img.shape[0])/2):int((l-img.shape[0])/2)+img.shape[0],int((l-img.shape[1])/2):int((l-img.shape[1])/2)+img.shape[1]]=img
+
+        self.img = img1
         self.plt_img=self.show_plt()
     def show_plt(self):
         img_gray=self.img
-        shape=Shape(img_gray)
+        shape=Shape(img_gray,1)
         self.contours=shape.contours
         fig1=plt.figure('图')
         ax =plt.subplot(241)
@@ -50,9 +54,8 @@ class ShowPlt:
         rr, cc = draw.circle(center[0], center[1], shape.radial_distance_mean())
         img1[rr, cc] = 0
 
-        img1=img_gray.copy()
-        rr, cc = draw.circle(center[0], center[1], shape.radial_distance_mean())
-        img1[rr, cc] = 0
+
+
         plt.imshow(img1,cmap='gray')
         ax=plt.subplot(246)
         plt.title('ellipse')
@@ -91,8 +94,9 @@ class ShowPlt:
         (line_x, line_y) = zip(*line)
         ax1.add_line(Line2D(line_x,line_y, linewidth=1, color=clr))
 class Shape:
-    def __init__(self, img):
+    def __init__(self, img,k):
         img=np.array(img)
+        self.k=k
         # print(img.shape)
         self.img=img
         # print(self.img.shape)
@@ -119,24 +123,26 @@ class Shape:
         rst = np.dot(tri, v).ptp(axis=0)
         return min(rst)/max(rst)
     def radial_distance_mean(self):
-        t=time.time()
         centr = np.array(list(self.props.centroid))
-        dist=(self.contours-centr)
+        dist=(self.contours-centr)*self.k
         return sum(np.array([np.linalg.norm(i) for i in dist]))/len(dist)
     def radial_distance_sd(self):
         u=self.radial_distance_mean()
         centr = np.array(list(self.props.centroid))
-        dist=np.array([np.linalg.norm(i) for i in (self.contours-centr)])
-        # print('########')
-        # print(np.sqrt(np.sum(np.square(dist-u))/len(dist)))
+        dist=np.array([np.linalg.norm(i) for i in (self.contours-centr)])*self.k
         return np.sqrt(np.sum(np.square(dist-u))/len(dist))
     def radial_distance_area_radtio(self):
         img_temp=np.copy(self.img)
-        rr, cc = draw.circle(self.props.centroid[::-1][1], self.props.centroid[::-1][0], self.radial_distance_mean())
-        self.img[rr, cc] = 0
-        lbs=measure.label(self.img,connectivity=2)
-        # return np.sum([i.area for i in measure.regionprops(lbs)])/self.props.area
-        return np.sum([i.area for i in measure.regionprops(lbs)])
+        points=np.array(np.where(img_temp>0)).T
+        dist=self.radial_distance_mean()
+        # t=time.time()
+        points=points-self.props.centroid
+        temp=np.sum([np.linalg.norm(i) for i in points]>dist)
+        # print(time.time()-t)
+        return temp
+        # rr, cc = draw.circle(self.props.centroid[::-1][1], self.props.centroid[::-1][0], self.radial_distance_mean())
+        # self.img[rr, cc] = 0
+        # return (self.img>0).sum()*self.k*self.k
     #待定
     def zero_crossings(self):
         dist=np.array([np.linalg.norm(i) for i in (self.contours-self.props.centroid)])
@@ -144,7 +150,7 @@ class Shape:
         return len(np.where(np.diff(np.sign(a)))[0])
     def entropy(self):
         centr = np.array(list(self.props.centroid))
-        dist=np.array([np.linalg.norm(i) for i in (self.contours-centr)])
+        dist=np.array([np.linalg.norm(i) for i in (self.contours-centr)])*self.k
         max1=np.max(dist)
         dist=dist*100//(int(max1))
         hist=list(np.histogram(dist,bins=100,range=(0,100)))
@@ -152,13 +158,20 @@ class Shape:
 
 class Shapes(object):
     """docstring for Shapes"""
-    def __init__(self, img):
+    def __init__(self, img,k):
         self.img=img
+        self.k=k
         labels=measure.label(self.img)
         self.props = measure.regionprops(labels)
         idct = ['compactness','convex_hull_area_ratio','convex_hull_perimeter_ratio','elliptic_cpmpactness','feret_ratio','radial_distance_mean',
                 'radial_distance_sd','radial_distance_area_radtio','zero_crossings','entropy']
-        self.para = {'compactness':[],
+        self.para = {
+                'center0':[],
+                'center1':[],
+                'area':[],
+                'perimeter':[],
+
+                'compactness':[],
                 'convex_hull_area_ratio':[],
                 'convex_hull_perimeter_ratio':[],
                 'elliptic_cpmpactness':[],
@@ -172,10 +185,15 @@ class Shapes(object):
                 'cov':[],
                 }
         for i in self.props:
-            l=max(i.image.shape)+10
+            l=max(i.image.shape)*2
             img1=np.zeros((l,l))
             img1[int((l-i.image.shape[0])/2):int((l-i.image.shape[0])/2)+i.image.shape[0],int((l-i.image.shape[1])/2):int((l-i.image.shape[1])/2)+i.image.shape[1]]=i.image
-            temp=Shape(img1)
+            temp=Shape(img1,self.k)
+
+            self.para['center0'].append(round(temp.props.centroid[1]*self.k,1))
+            self.para['center1'].append(round(temp.props.centroid[0]*self.k,1))
+            self.para['area'].append(temp.props.area*self.k**2)
+            self.para['perimeter'].append(round(temp.props.perimeter*k,1))
             self.para['compactness'].append(temp.compactness())
             self.para['convex_hull_area_ratio'].append(temp.convex_hull_area_ratio())
             self.para['convex_hull_perimeter_ratio'].append(temp.convex_hull_perimeter_ratio())

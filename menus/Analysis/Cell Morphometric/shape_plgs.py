@@ -6,10 +6,10 @@ from imagepy.core.manager import WindowsManager
 from imagepy.core.roi.pointroi import PointRoi
 from imagepy import ImagePlus
 import time
+from skimage.measure import regionprops
 class Mark:
     def __init__(self, data):
         self.data = data
-
     def draw(self, dc, f, **key):
         dc.SetPen(wx.Pen((255,255,0), width=1, style=wx.SOLID))
         dc.SetTextForeground((255,255,0))
@@ -68,13 +68,18 @@ class RegionShape(Simple):
     title = 'Cell Morphometric'
     note = ['8-bit', '16-bit']
     
-    para = {'con':'8-connect', 'slice':False, 'compactness':True, 'convex_hull_area_ratio':True,'convex_hull_perimeter_ratio':False,
+    para = {'con':'8-connect', 'slice':False,'center':True, 'area':True,'perimeter':True, 'compactness':True, 'convex_hull_area_ratio':True,'convex_hull_perimeter_ratio':False,
             'elliptic_cpmpactness':True, 'feret_ratio':False,'radial_distance_mean':False,'radial_distance_sd':False, 'radial_distance_area_radtio':False,
             'zero_crossings':True, 'entropy':False}
     
     view = [(list, ['4-connect', '8-connect'], str, 'conection', 'con', 'pix'),
             (bool, 'slice', 'slice'),
-            ('lab','=========  indecate  ========='),
+            ('lab','=========  base  ========='),
+            (bool, 'center', 'center'),
+            (bool, 'area', 'area'),
+            (bool, 'perimeter', 'perimeter'),
+
+            ('lab','=========  advance  ========='),
             (bool, 'compactness', 'compactness'),
             (bool, 'convex_hull_area_ratio', 'convex_hull_area_ratio'),
             (bool, 'convex_hull_perimeter_ratio', 'convex_hull_perimeter_ratio'),
@@ -106,8 +111,14 @@ class RegionShape(Simple):
                 'entropy':'entropy',
                 }
         idct = [i for i in idct if para[key[i]]]
+
+
         titles = ['Slice', 'ID'][0 if para['slice'] else 1:] 
+        if para['center']:titles.extend(['Center-X','Center-Y'])
+        if para['area']:titles.append('Area')
+        if para['perimeter']:titles.append('perimeter')
         titles.extend(idct)
+
         k = ips.unit[0]
         data, mark = [], []
         for i in range(len(imgs)):
@@ -115,20 +126,31 @@ class RegionShape(Simple):
             index = range(1, n+1)
             dt = []
             if para['slice']:dt.append([i]*n)
-            #print([i for i in range(n)])
             dt.append([i for i in range(n)])
-            #print(dt)
-            shape=Shapes(imgs[i])
-            t=time.time()
+            shape=Shapes(imgs[i],k)
+
+
+            ls = regionprops(buf)
+            if para['center']:
+                dt.append([round(i.centroid[1]*k,1) for i in ls])
+                dt.append([round(i.centroid[0]*k,1) for i in ls])
+            if para['area']:
+                dt.append([i.area*k**2 for i in ls])
+            if para['perimeter']:
+                dt.append([round(i.perimeter*k,1) for i in ls])
+
+            # if para['center']:
+            #     dt.append(np.array(shape.para['center0']))
+            #     dt.append(np.array(shape.para['center1']))
+            # if para['area']:dt.append(np.array(shape.para['area']))
+            # if para['perimeter']:dt.append(np.array(shape.para['perimeter']))         
             for i in idct:
                 if para[i]:dt.append(np.array(shape.para[i]).round(2))
-                print(dt)
-            #print('#########',time.time()-t)
+
             centroids = [i.centroid for i in shape.props]
             cvs = [(i.major_axis_length, i.minor_axis_length, i.orientation) for i in shape.props]
             mark.append([(center, cov) for center,cov in zip(centroids, cvs)])
             data.extend(list(zip(*dt)))
-
         # print(dt)
         IPy.table(ips.title+'-region statistic', data, titles)
         ips.mark = Mark(mark)
