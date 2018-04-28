@@ -1,4 +1,4 @@
-from .static import *
+from .morphometric import *
 from imagepy.core.engine import Tool
 from imagepy import IPy
 from imagepy.core.engine import Simple, Filter
@@ -7,6 +7,12 @@ from imagepy.core.roi.pointroi import PointRoi
 from imagepy import ImagePlus
 import time
 from skimage.measure import regionprops
+from skimage import measure
+from imagepy import IPy, wx
+from shapely import geometry
+from shapely.geometry import Point
+from wx.lib.pubsub import pub
+pub.subscribe(show_plt, 'show_plt')
 class Mark:
     def __init__(self, data):
         self.data = data
@@ -47,22 +53,30 @@ class IndexShow(Tool):
     def mouse_up(self, ips, x, y, btn, **key):
         self.sta = 0
         print(x,y)
-        gray=ips.img[int(y),int(x)]
-        print(gray)
-        labels=measure.label(ips.img.copy())
-        gray=labels[int(y),int(x)]
-        print(gray)        
-        props = measure.regionprops(labels)
-
-        l=max(props[gray-1].image.shape)+10
-        img1=np.zeros((l,l))
-        i=props[gray-1]
-        img1[int((l-i.image.shape[0])/2):int((l-i.image.shape[0])/2)+i.image.shape[0],int((l-i.image.shape[1])/2):int((l-i.image.shape[1])/2)+i.image.shape[1]]=i.image
         
-        ipsd = ImagePlus([img1], "original")
-        ipsd = ImagePlus([ShowPlt(img1).plt_img], "show")
-        ipsd.backmode = ipsd.backmode
-        IPy.show_ips(ipsd)
+        contours = measure.find_contours(ips.img, ips.img.max()/2)
+        for cont in contours:
+            polygon = geometry.Polygon(cont)
+            l, a, (cx,cy), (ax1,ax2), m =feature2d(cont)
+            if polygon.contains(Point(y,x)):
+                wx.CallAfter(pub.sendMessage,'show_plt',para=(l, a, cx,cy, ax1,ax2, m,cont))
+            # show_plt(l, a, cx,cy, ax1,ax2, m,cont)
+        # gray=ips.img[int(y),int(x)]
+        # print(gray)
+        # labels=measure.label(ips.img.copy())
+        # gray=labels[int(y),int(x)]
+        # print(gray)        
+        # props = measure.regionprops(labels)
+
+        # l=max(props[gray-1].image.shape)+10
+        # img1=np.zeros((l,l))
+        # i=props[gray-1]
+        # img1[int((l-i.image.shape[0])/2):int((l-i.image.shape[0])/2)+i.image.shape[0],int((l-i.image.shape[1])/2):int((l-i.image.shape[1])/2)+i.image.shape[1]]=i.image
+        
+        # ipsd = ImagePlus([img1], "original")
+        # ipsd = ImagePlus([ShowPlt(img1).plt_img], "show")
+        # ipsd.backmode = ipsd.backmode
+        # IPy.show_ips(ipsd)
 
 class RegionShape(Simple):
     title = 'Cell Morphometric'
@@ -96,23 +110,40 @@ class RegionShape(Simple):
             imgs = [ips.img]
         else: imgs = ips.imgs
         buf = imgs[0].astype(np.uint16)
-        strc = ndimage.generate_binary_structure(2, 1 if para['con']=='4-connect' else 2)
+        # strc = ndimage.generate_binary_structure(2, 1 if para['con']=='4-connect' else 2)
         idct = ['compactness','convex_hull_area_ratio','convex_hull_perimeter_ratio','elliptic_cpmpactness','feret_ratio','radial_distance_mean',
                 'radial_distance_sd','radial_distance_area_radtio','zero_crossings','entropy']
-        key = {'compactness':'compactness',
-                'convex_hull_area_ratio':'convex_hull_area_ratio',
-                'convex_hull_perimeter_ratio':'convex_hull_perimeter_ratio',
-                'elliptic_cpmpactness':'elliptic_cpmpactness',
-                'feret_ratio':'feret_ratio',
-                'radial_distance_mean':'radial_distance_mean',
-                'radial_distance_sd':'radial_distance_sd',
-                'radial_distance_area_radtio':'radial_distance_area_radtio',
-                'zero_crossings':'zero_crossings',
-                'entropy':'entropy',
+        # key = {'compactness':'compactness',
+        #         'convex_hull_area_ratio':'convex_hull_area_ratio',
+        #         'convex_hull_perimeter_ratio':'convex_hull_perimeter_ratio',
+        #         'elliptic_cpmpactness':'elliptic_cpmpactness',
+        #         'feret_ratio':'feret_ratio',
+        #         'radial_distance_mean':'radial_distance_mean',
+        #         'radial_distance_sd':'radial_distance_sd',
+        #         'radial_distance_area_radtio':'radial_distance_area_radtio',
+        #         'zero_crossings':'zero_crossings',
+        #         'entropy':'entropy',
+        #         }
+        # idct = [i for i in idct if para[key[i]]]
+
+        mor = {
+                'center0':[],
+                'center1':[],
+                'area':[],
+                'perimeter':[],
+                'compactness':[],
+                'convex_hull_area_ratio':[],
+                'convex_hull_perimeter_ratio':[],
+                'elliptic_cpmpactness':[],
+                'feret_ratio':[],
+                'radial_distance_mean':[],
+                'radial_distance_sd':[],
+                'radial_distance_area_radtio':[],
+                'zero_crossings':[],
+                'entropy':[],
+                'center':[],
+                'cov':[],
                 }
-        idct = [i for i in idct if para[key[i]]]
-
-
         titles = ['Slice', 'ID'][0 if para['slice'] else 1:] 
         if para['center']:titles.extend(['Center-X','Center-Y'])
         if para['area']:titles.append('Area')
@@ -122,36 +153,53 @@ class RegionShape(Simple):
         k = ips.unit[0]
         data, mark = [], []
         for i in range(len(imgs)):
-            n = ndimage.label(imgs[i], strc, output=buf)
-            index = range(1, n+1)
+            contours = measure.find_contours(imgs[i], imgs[i].max()/2)
+            for cont in contours:
+                l, a, (cx,cy), (ax1,ax2), m =feature2d(cont)
+                hull = ConvexHull(cont)
+                hull_cont=np.array([cont[hull.vertices,1], cont[hull.vertices,0]]).T
+                h_l, h_a, (h_cx,h_cy), (h_ax1,h_ax2), h_m =feature2d(hull_cont)
+                mor['center0'].append(cx)
+                mor['center1'].append(cy)
+                mor['area'].append(a)
+                mor['perimeter'].append(l)
+                mor['compactness'].append(compactness(a,l))
+                mor['convex_hull_area_ratio'].append(convex_hull_area_ratio(a,h_a))
+                mor['convex_hull_perimeter_ratio'].append(convex_hull_perimeter_ratio(l,h_l))
+                mor['elliptic_cpmpactness'].append(elliptic_cpmpactness(ax1,ax2,l))
+                mor['feret_ratio'].append(feret_ratio(cont))
+                mor['radial_distance_mean'].append(radial_distance_mean((cx,cy),cont))
+                mor['radial_distance_sd'].append(radial_distance_sd((cx,cy),cont))
+                mor['radial_distance_area_radtio'].append(radial_distance_area_radtio((cx,cy),cont))
+                mor['zero_crossings'].append(zero_crossings((cx,cy),cont))
+                mor['entropy'].append(entropys((cx,cy),cont))
+                mor['center'].append((cx,cy))
+                mor['cov'].append((ax1,ax2,m))
             dt = []
+            n=4
+            print('########',n)
             if para['slice']:dt.append([i]*n)
             dt.append([i for i in range(n)])
-            shape=Shapes(imgs[i],k)
-
-
-            ls = regionprops(buf)
             if para['center']:
-                dt.append([round(i.centroid[1]*k,1) for i in ls])
-                dt.append([round(i.centroid[0]*k,1) for i in ls])
-            if para['area']:
-                dt.append([i.area*k**2 for i in ls])
-            if para['perimeter']:
-                dt.append([round(i.perimeter*k,1) for i in ls])
+                dt.append(np.round(mor['center0']*k,2))
+                dt.append(np.round(mor['center1']*k,2))
+            if para['area']:dt.append(np.round(mor['area'],2)*k**2)
+            if para['perimeter']:dt.append(np.round(mor['perimeter'],2)*k)
+            if para['compactness']:dt.append(np.round(mor['compactness'],2))
+            if para['convex_hull_area_ratio']:dt.append(np.round(mor['convex_hull_area_ratio'],2))
+            if para['convex_hull_perimeter_ratio']:dt.append(np.round(mor['convex_hull_perimeter_ratio'],2))
+            if para['elliptic_cpmpactness']:dt.append(np.round(mor['elliptic_cpmpactness'],2))
+            if para['feret_ratio']:dt.append(np.round(mor['feret_ratio'],2))
+            if para['radial_distance_mean']:dt.append(np.round(mor['radial_distance_mean'],2))
+            if para['radial_distance_sd']:dt.append(np.round(mor['radial_distance_sd'],2))
+            if para['radial_distance_area_radtio']:dt.append(np.round(mor['radial_distance_area_radtio'],2))
+            if para['zero_crossings']:dt.append(np.round(mor['zero_crossings'],2))
+            if para['entropy']:dt.append(np.round(mor['entropy'],2))
 
-            # if para['center']:
-            #     dt.append(np.array(shape.para['center0']))
-            #     dt.append(np.array(shape.para['center1']))
-            # if para['area']:dt.append(np.array(shape.para['area']))
-            # if para['perimeter']:dt.append(np.array(shape.para['perimeter']))         
-            for i in idct:
-                if para[i]:dt.append(np.array(shape.para[i]).round(2))
-
-            centroids = [i.centroid for i in shape.props]
-            cvs = [(i.major_axis_length, i.minor_axis_length, i.orientation) for i in shape.props]
+            centroids = mor['center']
+            cvs =  mor['cov']
             mark.append([(center, cov) for center,cov in zip(centroids, cvs)])
             data.extend(list(zip(*dt)))
-        # print(dt)
         IPy.table(ips.title+'-region statistic', data, titles)
         ips.mark = Mark(mark)
         ips.update = True
