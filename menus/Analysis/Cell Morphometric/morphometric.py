@@ -120,8 +120,11 @@ def drawline(x1,x2,clr,ax1):
 
 def show_plt(para):
 
-        l, a, cx,cy, ax1,ax2, m,cont=para
+        l, a, (cx,cy),(ax1,ax2), m,cont=para
+        # cont[:]=cont[::-1,:]
         #画边界
+        print(cont.shape)
+        # cont[:]=np.array([cont[:,0]-np.min(cont[:,0]),cont[:,1]-np.min(cont[:,1])]).T
         a = np.linspace(0, np.pi*2,100)
         xys = np.array([np.cos(a), np.sin(a)])
         M = m * (ax1, ax2)/2

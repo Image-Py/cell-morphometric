@@ -21,7 +21,6 @@ class Mark:
         dc.SetTextForeground((255,255,0))
         font = wx.Font(8, wx.FONTFAMILY_DEFAULT, 
                        wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False)
-        
         dc.SetFont(font)
         data = self.data[0 if len(self.data)==1 else key['cur']]
         for i in range(len(data)):
@@ -57,9 +56,11 @@ class IndexShow(Tool):
         contours = measure.find_contours(ips.img, ips.img.max()/2)
         for cont in contours:
             polygon = geometry.Polygon(cont)
-            l, a, (cx,cy), (ax1,ax2), m =feature2d(cont)
             if polygon.contains(Point(y,x)):
-                wx.CallAfter(pub.sendMessage,'show_plt',para=(l, a, cx,cy, ax1,ax2, m,cont))
+                # l, a, (cx,cy), (ax1,ax2), m =
+                cont=np.array(cont)
+                cont[:,0]=cont[:,0].max()-cont[:,0]
+                wx.CallAfter(pub.sendMessage,'show_plt',para=feature2d(cont)+(cont,))
             # show_plt(l, a, cx,cy, ax1,ax2, m,cont)
         # gray=ips.img[int(y),int(x)]
         # print(gray)
@@ -176,7 +177,7 @@ class RegionShape(Simple):
                 mor['center'].append((cx,cy))
                 mor['cov'].append((ax1,ax2,m))
             dt = []
-            n=4
+            n=len(contours)
             print('########',n)
             if para['slice']:dt.append([i]*n)
             dt.append([i for i in range(n)])
