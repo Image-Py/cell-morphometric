@@ -52,8 +52,8 @@ class IndexShow(Tool):
     def mouse_up(self, ips, x, y, btn, **key):
         self.sta = 0
         print(x,y)
-        
-        contours = measure.find_contours(ips.img, ips.img.max()/2)
+        msk=ips.get_msk()
+        contours = measure.find_contours(msk, msk.max()/2)
         for cont in contours:
             polygon = geometry.Polygon(cont)
             if polygon.contains(Point(y,x)):
@@ -61,23 +61,6 @@ class IndexShow(Tool):
                 cont=np.array(cont)
                 cont[:,0]=cont[:,0].max()-cont[:,0]
                 wx.CallAfter(pub.sendMessage,'show_plt',para=feature2d(cont)+(cont,))
-            # show_plt(l, a, cx,cy, ax1,ax2, m,cont)
-        # gray=ips.img[int(y),int(x)]
-        # print(gray)
-        # labels=measure.label(ips.img.copy())
-        # gray=labels[int(y),int(x)]
-        # print(gray)        
-        # props = measure.regionprops(labels)
-
-        # l=max(props[gray-1].image.shape)+10
-        # img1=np.zeros((l,l))
-        # i=props[gray-1]
-        # img1[int((l-i.image.shape[0])/2):int((l-i.image.shape[0])/2)+i.image.shape[0],int((l-i.image.shape[1])/2):int((l-i.image.shape[1])/2)+i.image.shape[1]]=i.image
-        
-        # ipsd = ImagePlus([img1], "original")
-        # ipsd = ImagePlus([ShowPlt(img1).plt_img], "show")
-        # ipsd.backmode = ipsd.backmode
-        # IPy.show_ips(ipsd)
 
 class RegionShape(Simple):
     title = 'Cell Morphometric'
@@ -110,23 +93,11 @@ class RegionShape(Simple):
         if not para['slice']: 
             imgs = [ips.img]
         else: imgs = ips.imgs
+
         buf = imgs[0].astype(np.uint16)
         # strc = ndimage.generate_binary_structure(2, 1 if para['con']=='4-connect' else 2)
         idct = ['compactness','convex_hull_area_ratio','convex_hull_perimeter_ratio','elliptic_cpmpactness','feret_ratio','radial_distance_mean',
                 'radial_distance_sd','radial_distance_area_radtio','zero_crossings','entropy']
-        # key = {'compactness':'compactness',
-        #         'convex_hull_area_ratio':'convex_hull_area_ratio',
-        #         'convex_hull_perimeter_ratio':'convex_hull_perimeter_ratio',
-        #         'elliptic_cpmpactness':'elliptic_cpmpactness',
-        #         'feret_ratio':'feret_ratio',
-        #         'radial_distance_mean':'radial_distance_mean',
-        #         'radial_distance_sd':'radial_distance_sd',
-        #         'radial_distance_area_radtio':'radial_distance_area_radtio',
-        #         'zero_crossings':'zero_crossings',
-        #         'entropy':'entropy',
-        #         }
-        # idct = [i for i in idct if para[key[i]]]
-
         mor = {
                 'center0':[],
                 'center1':[],
@@ -150,11 +121,15 @@ class RegionShape(Simple):
         if para['area']:titles.append('Area')
         if para['perimeter']:titles.append('perimeter')
         titles.extend(idct)
+        print('############')
 
         k = ips.unit[0]
         data, mark = [], []
         for i in range(len(imgs)):
-            contours = measure.find_contours(imgs[i], imgs[i].max()/2)
+            if ips.get_msk() is None:img=imgs[i]
+            else: img=ips.get_msk()
+            contours = measure.find_contours(img, img.max()/2)
+            # contours = measure.find_contours(msk, msk.max()/2)
             for cont in contours:
                 l, a, (cx,cy), (ax1,ax2), m =feature2d(cont)
                 hull = ConvexHull(cont)
@@ -205,9 +180,7 @@ class RegionShape(Simple):
         ips.mark = Mark(mark)
         ips.update = True
         ips.tool = IndexShow()
-
 plgs = [RegionShape]
-
 if __name__=='__main__':
     img_gray = imread('test1.png',True)
     img_gray=np.array((img_gray>128)*255)
