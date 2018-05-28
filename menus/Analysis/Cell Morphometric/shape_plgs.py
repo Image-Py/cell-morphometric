@@ -4,7 +4,7 @@ from imagepy import IPy
 from imagepy.core.engine import Simple, Filter
 from imagepy.core.manager import WindowsManager
 from imagepy.core.roi.pointroi import PointRoi
-from imagepy import ImagePlus
+# from imagepy import ImagePlus
 import time
 from skimage.measure import regionprops
 from skimage import measure
@@ -12,6 +12,7 @@ from imagepy import IPy, wx
 from shapely import geometry
 from shapely.geometry import Point
 from wx.lib.pubsub import pub
+import pandas as pd
 pub.subscribe(show_plt, 'show_plt')
 class Mark:
     def __init__(self, data):
@@ -38,7 +39,7 @@ class Mark:
 
 class IndexShow(Tool):
     title = 'Index Show'
-    view = [(int, (0,30), 0,  u'width', 'width', 'pix')]
+    view = [(int, 'width',(0,30), 0,  u'width',  'pix')]
     para = {'width':1}
     
     def __init__(self):
@@ -63,6 +64,7 @@ class IndexShow(Tool):
                 wx.CallAfter(pub.sendMessage,'show_plt',para=feature2d(cont)+(cont,))
 
 class RegionShape(Simple):
+
     title = 'Cell Morphometric'
     note = ['8-bit', '16-bit']
     
@@ -70,14 +72,14 @@ class RegionShape(Simple):
             'elliptic_cpmpactness':True, 'feret_ratio':False,'radial_distance_mean':False,'radial_distance_sd':False, 'radial_distance_area_radtio':False,
             'zero_crossings':True, 'entropy':False}
     
-    view = [(list, ['4-connect', '8-connect'], str, 'conection', 'con', 'pix'),
+    view = [(list,  'con',['4-connect', '8-connect'], str, 'conection', 'pix'),
             (bool, 'slice', 'slice'),
-            ('lab','=========  base  ========='),
+            ('lab', None,'=========  base  ========='),
             (bool, 'center', 'center'),
             (bool, 'area', 'area'),
             (bool, 'perimeter', 'perimeter'),
 
-            ('lab','=========  advance  ========='),
+            ('lab', None,'=========  advance  ========='),
             (bool, 'compactness', 'compactness'),
             (bool, 'convex_hull_area_ratio', 'convex_hull_area_ratio'),
             (bool, 'convex_hull_perimeter_ratio', 'convex_hull_perimeter_ratio'),
@@ -90,6 +92,7 @@ class RegionShape(Simple):
             (bool, 'entropy', 'entropy')
             ]
     def run(self, ips, imgs, para = None):
+        print('ok123')
         if not para['slice']: 
             imgs = [ips.img]
         else: imgs = ips.imgs
@@ -120,7 +123,8 @@ class RegionShape(Simple):
         if para['center']:titles.extend(['Center-X','Center-Y'])
         if para['area']:titles.append('Area')
         if para['perimeter']:titles.append('perimeter')
-        titles.extend(idct)
+
+        titles.extend([i for i in idct if para[i]])
         print('############')
 
         k = ips.unit[0]
@@ -176,7 +180,11 @@ class RegionShape(Simple):
             cvs =  mor['cov']
             mark.append([(center, cov) for center,cov in zip(centroids, cvs)])
             data.extend(list(zip(*dt)))
-        IPy.table(ips.title+'-region statistic', data, titles)
+            print(titles)
+            print(data)
+        # IPy.table(ips.title+'-region statistic', data, titles)
+        IPy.show_table(pd.DataFrame(data, columns=titles), ips.title+'-region')
+        print('123')
         ips.mark = Mark(mark)
         ips.update = True
         ips.tool = IndexShow()
